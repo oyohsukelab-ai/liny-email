@@ -12,7 +12,7 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 load_dotenv()
@@ -119,20 +119,26 @@ class SignedLinkParams(BaseModel):
     url: str
 
 
-@app.get("/_sign", response_model=SignedLinkParams)
-def sign_link(
+@app.get("/_sign_and_send")
+def sign_and_send(
+    request: Request,
     to: EmailStr = Query(...),
     id: str = Query(...),
-    base_url: str = Query("http://localhost:8000/send"),
 ):
     ts = int(time.time())
     sig = make_signature(str(to), id, ts)
-    url = f"{base_url}?to={quote(str(to))}&id={quote(id)}&ts={ts}&sig={sig}"
 
-    # 署名生成ログ（誰にどのメッセージIDでURL発行したか）
-    logger.info(f"[SIGN] to={to} id={id} ts={ts}")
+    # Render / ローカル両対応の base_url を自動生成
+    # 例: https://liny-email.onrender.com/ みたいなのが入る
+    base_url = str(request.base_url).rstrip("/")
 
-    return {"to": to, "id": id, "ts": ts, "sig": sig, "url": url}
+    # /send に飛ばすためのURLを組み立て
+    url = f"{base_url}/send?to={quote(str(to))}&id={quote(id)}&ts={ts}&sig={sig}"
+
+    logger.info(f"[SIGN_AND_REDIRECT] to={to} id={id} ts={ts} redirect_to={url}")
+
+    # 307 にしておくと GET → GET のまま /send に渡る
+    return RedirectResponse(url=url, status_code=307)
 
 
 @app.get("/send", response_class=HTMLResponse)
