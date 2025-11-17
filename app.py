@@ -212,5 +212,10 @@ def send_actual(
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="localhost", port=8000)
+    port = int(os.environ.get("PORT", 8000))  # Render では PORT が入る
+    uvicorn.run(
+        "app:app",  # "appモジュールのapp変数"の意味
+        host="0.0.0.0",  # ローカルじゃなくて全インターフェースにバインド
+        port=port,
+    )
     # print(load_message("test"))  # 動作確認用ダミー
