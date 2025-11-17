@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, EmailStr
 
 load_dotenv()
@@ -134,8 +135,44 @@ def sign_link(
     return {"to": to, "id": id, "ts": ts, "sig": sig, "url": url}
 
 
-@app.get("/send")
-def send(
+@app.get("/send", response_class=HTMLResponse)
+def send_page(
+    request: Request,
+    to: EmailStr = Query(...),
+    id: str = Query(...),
+    ts: int = Query(...),
+    sig: str = Query(...),
+):
+    # まずは何もせず「送信中…」ページを返す
+    # 実際の送信は JS が /send_actual を叩いて行う
+
+    html = f"""
+    <html>
+        <head>
+            <meta charset="utf-8">
+            <title>送信中...</title>
+        </head>
+        <body>
+            <h1 style="font-family: sans-serif;">📮 メール送信中です…</h1>
+
+            <script>
+                fetch("/send_actual?to={to}&id={id}&ts={ts}&sig={sig}")
+                    .then(res => res.json())
+                    .then(data => {{
+                        document.body.innerHTML = "<h1 style='font-family: sans-serif;'>🎉 送信が完了しました！</h1>";
+                    }})
+                    .catch(err => {{
+                        document.body.innerHTML = "<h1 style='color:red;font-family:sans-serif;'>❌ 送信に失敗しました</h1>";
+                    }});
+            </script>
+        </body>
+    </html>
+    """
+    return HTMLResponse(content=html)
+
+
+@app.get("/send_actual")
+def send_actual(
     request: Request,
     to: EmailStr = Query(...),
     id: str = Query(...),
@@ -144,29 +181,26 @@ def send(
 ):
     client_ip = request.client.host if request.client else "unknown"
 
-    # 送信リクエスト受信ログ（ここが「送信リクエストもらったやつ」のログ）
     logger.info(f"[SEND_REQUEST] ip={client_ip} to={to} id={id} ts={ts}")
 
     # 署名検証
     verify_signature(str(to), id, ts, sig)
 
-    # メッセージロード
+    # メッセージ読み込み
     subject, body = load_message(id)
 
-    # 実際のメール送信
+    # メール送信
     try:
         send_email(str(to), subject, body)
     except Exception:
-        # スタックトレース付きでログ
         logger.exception(
             f"[SEND_FAILED] ip={client_ip} to={to} id={id} subject={subject}"
         )
         raise HTTPException(status_code=500, detail="send failed")
 
-    # 成功ログ
     logger.info(f"[SEND_SUCCESS] ip={client_ip} to={to} id={id} subject={subject}")
 
-    return {"status": "ok", "to": str(to), "id": id, "subject": subject}
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
