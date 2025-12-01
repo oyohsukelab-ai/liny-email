@@ -128,8 +128,6 @@ def sign_and_send(
     ts = int(time.time())
     sig = make_signature(str(to), id, ts)
 
-    # Render / ローカル両対応の base_url を自動生成
-    # 例: https://liny-email.onrender.com/ みたいなのが入る
     base_url = str(request.base_url).rstrip("/")
 
     # /send に飛ばすためのURLを組み立て
@@ -218,4 +216,3 @@ if __name__ == "__main__":
         host="0.0.0.0",  # ローカルじゃなくて全インターフェースにバインド
         port=port,
     )
-    # print(load_message("test"))  # 動作確認用ダミー
